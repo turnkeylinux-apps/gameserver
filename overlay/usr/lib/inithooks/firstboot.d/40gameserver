@@ -3,10 +3,10 @@
 
 . /etc/default/inithooks
 
-[ -e $INITHOOKS_CONF ] && . $INITHOOKS_CONF
+[ -e "$INITHOOKS_CONF" ] && . "$INITHOOKS_CONF"
 
 GAMEUSER=${GAMEUSER:-gameuser}
-$INITHOOKS_PATH/bin/setpass.py $GAMEUSER --pass="$APP_PASS"
+$INITHOOKS_PATH/bin/setpass.py "$GAMEUSER" --pass="$APP_PASS"
 
 unset skip_init
 # if sec updates set (or turnkey-init-fence is active), then we must be running
@@ -16,6 +16,8 @@ if [[ -n "$SEC_UPDATES" ]] || systemctl -q is-active turnkey-init-fence ; then
     APP_GAMESERVER_BRANCH="${APP_GAMESERVER_BRANCH:-master}"
     [[ -n "$GAME" ]] || skip_init=true
 fi
-$INITHOOKS_PATH/bin/gameserver.py --gameserver-repo="$APP_GAMESERVER_REPO" --gameserver-branch="$APP_GAMESERVER_BRANCH"
+$INITHOOKS_PATH/bin/gameserver.py \
+    --gameserver-repo="$APP_GAMESERVER_REPO" \
+    --gameserver-branch="$APP_GAMESERVER_BRANCH"
 
 [[ -n "$skip_init" ]] || /usr/local/bin/gameserver-init

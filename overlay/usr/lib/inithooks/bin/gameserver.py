@@ -9,8 +9,15 @@ Options:
 import os
 import sys
 import getopt
+import shutil
 import subprocess
+import tempfile
 from libinithooks.dialog_wrapper import Dialog
+
+DEFAULT_GAMESERVER_REPO = 'https://github.com/jesinmat/linux-gameservers.git'
+DEFAULT_GAMESERVER_BRANCH = 'master'
+GAME_REPO_DIR = '/root/gameservers'
+SOURCE_RECORD = '/usr/local/share/turnkey-gameserver/source'
 
 def usage(s=None):
     if s:
@@ -25,9 +32,6 @@ def main():
                 ['help', 'gameserver-repo=', 'gameserver-branch='])
     except getopt.GetoptError as e:
         usage(e)
-
-    default_gameserver_repo = 'https://github.com/jesinmat/linux-gameservers.git'
-    default_gameserver_branch = 'master'
 
     gameserver_repo = ""
     gameserver_branch = ""
@@ -50,48 +54,52 @@ def main():
                 ok, gameserver_repo = dialog.inputbox(
                     'TKL Gameserver',
                     'Choose gameserver repo url',
-                    default_gameserver_repo)
+                    DEFAULT_GAMESERVER_REPO)
                 if not ok:
-                    gameserver_repo = default_gameserver_repo
+                    gameserver_repo = DEFAULT_GAMESERVER_REPO
             if not gameserver_branch:
                 ok, gameserver_branch = dialog.inputbox(
                     'TKL Gameserver',
                     'Choose gameserver branch',
-                    default_gameserver_branch)
+                    DEFAULT_GAMESERVER_BRANCH)
                 if not ok:
-                    gameserver_branch = default_gameserver_branch
+                    gameserver_branch = DEFAULT_GAMESERVER_BRANCH
 
         else:
-            gameserver_repo = default_gameserver_repo
-            gameserver_branch = default_gameserver_branch
+            gameserver_repo = DEFAULT_GAMESERVER_REPO
+            gameserver_branch = DEFAULT_GAMESERVER_BRANCH
 
-    needs_pull = False
-    old_dir = os.getcwd()
-    if gameserver_repo != default_gameserver_repo:
-        os.chdir('/root/gameservers')
-        subprocess.run([
-            'git', 'remote', 'set-url', 'origin',
-            gameserver_repo
-        ])
-        needs_pull = True
-    if gameserver_branch != default_gameserver_branch:
-        os.chdir('/root/gameservers')
-        subprocess.run([
-            'git', 'fetch'
-        ])
-        subprocess.run([
-            'git', 'checkout', '--track',
-            f'origin/{gameserver_branch}',
-        ])
-        needs_pull = True
+    if (gameserver_repo, gameserver_branch) == (
+            DEFAULT_GAMESERVER_REPO, DEFAULT_GAMESERVER_BRANCH):
+        return
 
-    if needs_pull:
-        os.chdir('/root/gameservers')
+    temp_dir = tempfile.mkdtemp(prefix='.gameservers-', dir='/root')
+    candidate_dir = os.path.join(temp_dir, 'repo')
+    try:
         subprocess.run([
-            'git', 'pull'
-        ])
-        
-    os.chdir(old_dir)
+            'git', 'clone', '--depth=1', '--branch', gameserver_branch,
+            gameserver_repo, candidate_dir,
+        ], check=True)
+        if not os.path.isfile(os.path.join(candidate_dir, 'auto_install.sh')):
+            raise RuntimeError('custom repository has no auto_install.sh')
+        if not os.path.isdir(os.path.join(candidate_dir, 'games')):
+            raise RuntimeError('custom repository has no games directory')
+        commit = subprocess.run([
+            'git', '-C', candidate_dir, 'rev-parse', 'HEAD',
+        ], check=True, capture_output=True, text=True).stdout.strip()
+
+        shutil.rmtree(GAME_REPO_DIR)
+        os.replace(candidate_dir, GAME_REPO_DIR)
+        with open(SOURCE_RECORD, 'w', encoding='utf-8') as source_record:
+            source_record.write(
+                'wrapper_channel=custom git repository\n'
+                f'wrapper_repository={gameserver_repo}\n'
+                f'wrapper_ref={gameserver_branch}\n'
+                f'wrapper_commit={commit}\n'
+                'linuxgsm_channel=custom wrapper policy\n'
+            )
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == '__main__':
     main()

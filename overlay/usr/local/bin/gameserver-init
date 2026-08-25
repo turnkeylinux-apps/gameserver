@@ -3,11 +3,12 @@
 GAMEUSER="gameuser"
 LOGFILE="/var/log/gameserver/install.log"
 GAME_REPO_DIR="/root/gameservers"
+SUDOERS_FILE="/etc/sudoers.d/gameserver-install"
 
 clean_exit() {
     exit_code=$1
     shift
-    sed -i "\|^$GAMEUSER| s|^|#|" /etc/sudoers
+    sed -i "\|^$GAMEUSER| s|^|#|" "$SUDOERS_FILE"
     if [[ $exit_code -ne 0 ]]; then
         rm -f /etc/gameserver/gameserver
         echo
@@ -48,7 +49,7 @@ install_game() {
     if [ ! -f "/etc/gameserver/installation.done" ]; then
         conf=/etc/gameserver/gameserver
         [[ -f "$conf" ]] || clean_exit 1 "Conf file ($conf) not found."
-        . $conf
+        . "$conf"
         exit_code=0
         cd "$GAME_REPO_DIR"
         chmod +x "auto_install.sh"
@@ -70,7 +71,8 @@ install_game() {
 
 install_exit_code=0
 trap 'clean_exit $?' INT TERM ERR
-sed -i "\|$GAMEUSER| s|^\s*#||" /etc/sudoers
+sed -i "\|$GAMEUSER| s|^[[:space:]]*#||" "$SUDOERS_FILE"
+visudo -cf "$SUDOERS_FILE"
 select_game
 install_game 2>&1 | tee -a "$LOGFILE" || install_exit_code=$?
 clean_exit $install_exit_code

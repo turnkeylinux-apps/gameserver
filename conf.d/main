@@ -1,37 +1,77 @@
-#!/bin/sh -ex
+#!/bin/bash -e
 
-GAMEUSER="gameuser"
-GAME_REPO_DIR="/root/gameservers"
-GAME_REPO_URL="https://github.com/jesinmat/linux-gameservers.git"
+set -o pipefail
+set -x
 
-# Add i386 arch (common for lots of games) and install lib32gcc1
-dpkg --add-architecture i386
-dir=/etc/apt/sources.list.d
-for list in $dir/sources.list $dir/security.sources.list; do
-    sed -i "\|turnkeylinux.org| s|\[|\[arch=amd64, |" $list
+GAMEUSER=gameuser
+GAME_REPO_DIR=/root/gameservers
+SRC=/usr/local/src
+WRAPPER_COMMIT=d2017be9f56db0da2a1c45651e656f47bc7ce42a
+WRAPPER_ARCHIVE=linux-gameservers-$WRAPPER_COMMIT.zip
+WRAPPER_SHA256=302b859632e34715f88b6f3455b7925efe822fb0b6b4a04514af12c1143cb983
+LINUXGSM_VERSION=v26.2.0
+LINUXGSM_TAG_COMMIT=bded3376bc44d20b89fcc6c32f23a66347fffec6
+LINUXGSM_BOOTSTRAP=linuxgsm-$LINUXGSM_VERSION.sh
+LINUXGSM_SHA256=0a17b88b4d6a272ce8494d55fc0c2748f3187057c15b801d71991428aa8f79bd
+
+# Older game servers still need i386 libraries. Restrict TurnKey package
+# sources to amd64 before enabling Debian multiarch.
+for source_file in /etc/apt/sources.list.d/*; do
+    [ -f "$source_file" ] || continue
+    grep -q 'turnkeylinux.org' "$source_file" || continue
+    if grep -q '^Types:' "$source_file"; then
+        if grep -q '^Architectures:' "$source_file"; then
+            sed -i 's/^Architectures:.*/Architectures: amd64/' "$source_file"
+        else
+            sed -i '/^Types:/a Architectures: amd64' "$source_file"
+        fi
+    else
+        sed -i -E '/turnkeylinux\.org/ { /\[[^]]*arch=/! s|^deb[[:space:]]+|deb [arch=amd64] |; }' "$source_file"
+    fi
 done
+dpkg --add-architecture i386
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y lib32gcc-s1
 
-# Create GAMEUSER as (limited) sudo user (initially commented out - running
-# gameserver-init will enable it; then disable it afterwards).
 useradd -m -s /bin/bash "$GAMEUSER"
-match="# Cmnd alias specification"
-line1="Cmnd_Alias APT_GET = /usr/bin/apt-get"
-line2="Cmnd_Alias TRUE = /usr/bin/true"
-line3="#$GAMEUSER ALL=(ALL) NOPASSWD: APT_GET, TRUE"
-for line in "$line1" "$line2"; do
-    sed -i "\|$match| a $line" /etc/sudoers
-done
-echo >> /etc/sudoers
-echo "$line3" >> /etc/sudoers
+cat > /etc/sudoers.d/gameserver-install <<EOF
+Cmnd_Alias GAMESERVER_APT_GET = /usr/bin/apt-get
+Cmnd_Alias GAMESERVER_TRUE = /usr/bin/true
+#$GAMEUSER ALL=(ALL) NOPASSWD: GAMESERVER_APT_GET, GAMESERVER_TRUE
+EOF
+chmod 0440 /etc/sudoers.d/gameserver-install
+visudo -cf /etc/sudoers.d/gameserver-install
 
-# disable SSH login for GAMEUSER
-echo "DenyUsers	$GAMEUSER" >> /etc/ssh/sshd_config
+install -d -m 0755 /etc/ssh/sshd_config.d
+printf 'DenyUsers %s\n' "$GAMEUSER" > /etc/ssh/sshd_config.d/turnkey-gameserver.conf
 
-git clone --depth=1 "$GAME_REPO_URL" "$GAME_REPO_DIR"
+unzip -q "$SRC/$WRAPPER_ARCHIVE" -d /root
+mv "/root/linux-gameservers-$WRAPPER_COMMIT" "$GAME_REPO_DIR"
+rm -f "$SRC/$WRAPPER_ARCHIVE"
 
-mkdir -p /var/log/gameserver
+install -d -m 0755 /usr/local/share/turnkey-gameserver
+install -m 0755 "$SRC/$LINUXGSM_BOOTSTRAP" \
+    /usr/local/share/turnkey-gameserver/linuxgsm.sh
+rm -f "$SRC/$LINUXGSM_BOOTSTRAP"
 
-# remove unused/unneeded images
-rm -f /var/www/images/{adminer.png,shell.png}
+# Keep the wrapper on Debian package names and the verified LinuxGSM release.
+sed -i 's/bsdmainutils/bsdextrautils/' "$GAME_REPO_DIR/auto_install.sh"
+sed -i '\|run_as_user "wget -O .*https://linuxgsm.sh"|c\    install -o "$GAMEUSER" -g "$GAMEUSER" -m 0755 /usr/local/share/turnkey-gameserver/linuxgsm.sh "$LGSM_PATH"' \
+    "$GAME_REPO_DIR/auto_install.sh"
+grep -q 'install -o "$GAMEUSER".*turnkey-gameserver/linuxgsm.sh' \
+    "$GAME_REPO_DIR/auto_install.sh"
+
+cat > /usr/local/share/turnkey-gameserver/source <<EOF
+wrapper_channel=official jesinmat/linux-gameservers master
+wrapper_commit=$WRAPPER_COMMIT
+wrapper_archive_sha256=$WRAPPER_SHA256
+linuxgsm_channel=official stable tags
+linuxgsm_version=$LINUXGSM_VERSION
+linuxgsm_tag_commit=$LINUXGSM_TAG_COMMIT
+linuxgsm_bootstrap_sha256=$LINUXGSM_SHA256
+EOF
+
+install -d -m 0755 /var/log/gameserver
+
+# The landing page supplied by tkl-webcp does not use these icons.
+rm -f /var/www/images/adminer.png /var/www/images/shell.png

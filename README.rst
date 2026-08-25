@@ -15,9 +15,11 @@ and on top of that:
 
 - Managing game servers using `Linux Gameservers`_:
 
-   - Downloads newest version during first boot to ensure best possible game
-     support.
-   - Wrapper for `LinuxGSM`_ with support for up to 100 games.
+   - Installs a verified game catalog and LinuxGSM stable release.
+   - Wrapper for `LinuxGSM`_ with support for more than 100 game servers.
+   - ``turnkey-gameserver-update`` checks or applies verified catalog and
+     LinuxGSM updates. Individual game servers retain their LinuxGSM update
+     command.
 
 - Fully automatic or interactive game server selection:
 
@@ -31,7 +33,7 @@ and on top of that:
 Credentials *(passwords set at first boot)*
 -------------------------------------------
 
--  Webmin, SSH, Shellinabox: username **root**
+-  Webmin, SSH: username **root**
 -  Game server: username **gameuser**
 
 .. _TurnKey GNU/Linux: https://www.turnkeylinux.org/

@@ -1,0 +1,27 @@
+#!/bin/bash -e
+
+set -o pipefail
+set -x
+
+SRC=/usr/local/src
+WRAPPER_COMMIT=d2017be9f56db0da2a1c45651e656f47bc7ce42a
+WRAPPER_ARCHIVE=linux-gameservers-$WRAPPER_COMMIT.zip
+WRAPPER_SHA256=302b859632e34715f88b6f3455b7925efe822fb0b6b4a04514af12c1143cb983
+LINUXGSM_VERSION=v26.2.0
+LINUXGSM_BOOTSTRAP=linuxgsm-$LINUXGSM_VERSION.sh
+LINUXGSM_SHA256=0a17b88b4d6a272ce8494d55fc0c2748f3187057c15b801d71991428aa8f79bd
+
+proxy_args=()
+if [ -n "${FAB_HTTP_PROXY:-}" ]; then
+    proxy_args=(--proxy "$FAB_HTTP_PROXY")
+fi
+
+curl -LfsS "${proxy_args[@]}" \
+    "https://github.com/jesinmat/linux-gameservers/archive/$WRAPPER_COMMIT.zip" \
+    -o "$SRC/$WRAPPER_ARCHIVE"
+curl -LfsS "${proxy_args[@]}" \
+    "https://raw.githubusercontent.com/GameServerManagers/LinuxGSM/$LINUXGSM_VERSION/linuxgsm.sh" \
+    -o "$SRC/$LINUXGSM_BOOTSTRAP"
+
+printf '%s  %s\n' "$WRAPPER_SHA256" "$SRC/$WRAPPER_ARCHIVE" | sha256sum -c -
+printf '%s  %s\n' "$LINUXGSM_SHA256" "$SRC/$LINUXGSM_BOOTSTRAP" | sha256sum -c -

@@ -1,0 +1,156 @@
+#!/bin/bash -e
+
+set -o pipefail
+
+WRAPPER_REPO=https://github.com/jesinmat/linux-gameservers.git
+WRAPPER_DIR=/root/gameservers
+LINUXGSM_REPO=https://github.com/GameServerManagers/LinuxGSM.git
+SHARE_DIR=/usr/local/share/turnkey-gameserver
+SOURCE_RECORD=$SHARE_DIR/source
+TEMP_DIR=
+
+usage() {
+    echo "usage: turnkey-gameserver-update --check | --apply [--dry-run]" >&2
+    exit 2
+}
+
+fail() {
+    echo "gameserver update: $*" >&2
+    exit 1
+}
+
+record_value() {
+    key=$1
+    value=$(sed -n "s/^${key}=//p" "$SOURCE_RECORD")
+    [ -n "$value" ] || fail "missing source record key: $key"
+    printf '%s\n' "$value"
+}
+
+cleanup() {
+    if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
+    fi
+}
+trap cleanup EXIT HUP INT TERM
+
+prepare_wrapper() {
+    wrapper_root=$1
+    [ -f "$wrapper_root/auto_install.sh" ] || fail "wrapper archive has no auto_install.sh"
+    [ -d "$wrapper_root/games" ] || fail "wrapper archive has no games directory"
+    sed -i 's/bsdmainutils/bsdextrautils/' "$wrapper_root/auto_install.sh"
+    sed -i '\|run_as_user "wget -O .*https://linuxgsm.sh"|c\    install -o "$GAMEUSER" -g "$GAMEUSER" -m 0755 /usr/local/share/turnkey-gameserver/linuxgsm.sh "$LGSM_PATH"' \
+        "$wrapper_root/auto_install.sh"
+    grep -q 'install -o "$GAMEUSER".*turnkey-gameserver/linuxgsm.sh' \
+        "$wrapper_root/auto_install.sh" || fail "wrapper bootstrap patch did not apply"
+}
+
+fetch_candidate() {
+    wrapper_candidate_commit=$(git ls-remote "$WRAPPER_REPO" refs/heads/master | awk 'NR == 1 {print $1}')
+    printf '%s\n' "$wrapper_candidate_commit" | grep -Eq '^[0-9a-f]{40}$' ||
+        fail "unable to resolve the official wrapper master commit"
+
+    linuxgsm_refs=$(git ls-remote --refs --tags "$LINUXGSM_REPO" 'refs/tags/v*')
+    linuxgsm_candidate_version=$(printf '%s\n' "$linuxgsm_refs" |
+        sed -n 's|^[^[:space:]]*[[:space:]]*refs/tags/||p' |
+        grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+    [ -n "$linuxgsm_candidate_version" ] || fail "no official LinuxGSM stable tag found"
+    linuxgsm_candidate_commit=$(printf '%s\n' "$linuxgsm_refs" |
+        awk -v ref="refs/tags/$linuxgsm_candidate_version" '$2 == ref {print $1}')
+    printf '%s\n' "$linuxgsm_candidate_commit" | grep -Eq '^[0-9a-f]{40}$' ||
+        fail "unable to resolve the official LinuxGSM tag commit"
+
+    TEMP_DIR=$(mktemp -d /var/tmp/turnkey-gameserver-update.XXXXXX)
+    wrapper_archive=$TEMP_DIR/wrapper.zip
+    linuxgsm_bootstrap=$TEMP_DIR/linuxgsm.sh
+    curl -LfsS \
+        "https://github.com/jesinmat/linux-gameservers/archive/$wrapper_candidate_commit.zip" \
+        -o "$wrapper_archive"
+    curl -LfsS \
+        "https://raw.githubusercontent.com/GameServerManagers/LinuxGSM/$linuxgsm_candidate_version/linuxgsm.sh" \
+        -o "$linuxgsm_bootstrap"
+    wrapper_candidate_sha256=$(sha256sum "$wrapper_archive" | awk '{print $1}')
+    linuxgsm_candidate_sha256=$(sha256sum "$linuxgsm_bootstrap" | awk '{print $1}')
+
+    wrapper_candidate_root=$TEMP_DIR/linux-gameservers-$wrapper_candidate_commit
+    unzip -q "$wrapper_archive" -d "$TEMP_DIR"
+    prepare_wrapper "$wrapper_candidate_root"
+    grep -qx "version=\"$linuxgsm_candidate_version\"" "$linuxgsm_bootstrap" ||
+        fail "LinuxGSM bootstrap version does not match its tag"
+}
+
+mode=
+dry_run=false
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --check) [ -z "$mode" ] || usage; mode=check ;;
+        --apply) [ -z "$mode" ] || usage; mode=apply ;;
+        --dry-run) dry_run=true ;;
+        *) usage ;;
+    esac
+    shift
+done
+[ -n "$mode" ] || usage
+[ "$mode" = apply ] || [ "$dry_run" = false ] || usage
+[ -f "$SOURCE_RECORD" ] || fail "missing source record"
+
+wrapper_channel=$(record_value wrapper_channel)
+[ "$wrapper_channel" = "official jesinmat/linux-gameservers master" ] ||
+    fail "custom wrapper configured; update it through its selected repository"
+wrapper_installed_commit=$(record_value wrapper_commit)
+wrapper_installed_sha256=$(record_value wrapper_archive_sha256)
+linuxgsm_installed_version=$(record_value linuxgsm_version)
+linuxgsm_installed_commit=$(record_value linuxgsm_tag_commit)
+linuxgsm_installed_sha256=$(record_value linuxgsm_bootstrap_sha256)
+
+fetch_candidate
+
+if [ "$wrapper_candidate_commit" = "$wrapper_installed_commit" ]; then
+    [ "$wrapper_candidate_sha256" = "$wrapper_installed_sha256" ] ||
+        fail "official wrapper archive changed for the installed commit"
+fi
+if [ "$linuxgsm_candidate_version" = "$linuxgsm_installed_version" ]; then
+    [ "$linuxgsm_candidate_commit" = "$linuxgsm_installed_commit" ] ||
+        fail "official LinuxGSM tag changed for the installed version"
+    [ "$linuxgsm_candidate_sha256" = "$linuxgsm_installed_sha256" ] ||
+        fail "official LinuxGSM bootstrap changed for the installed version"
+fi
+
+status=up-to-date
+if [ "$wrapper_candidate_commit" != "$wrapper_installed_commit" ] ||
+        dpkg --compare-versions "${linuxgsm_installed_version#v}" lt "${linuxgsm_candidate_version#v}"; then
+    status=update-available
+fi
+
+printf 'wrapper_installed_commit=%s\n' "$wrapper_installed_commit"
+printf 'wrapper_candidate_commit=%s\n' "$wrapper_candidate_commit"
+printf 'wrapper_candidate_archive_sha256=%s\n' "$wrapper_candidate_sha256"
+printf 'linuxgsm_installed=%s\n' "$linuxgsm_installed_version"
+printf 'linuxgsm_candidate=%s\n' "$linuxgsm_candidate_version"
+printf 'linuxgsm_candidate_commit=%s\n' "$linuxgsm_candidate_commit"
+printf 'linuxgsm_candidate_bootstrap_sha256=%s\n' "$linuxgsm_candidate_sha256"
+printf 'status=%s\n' "$status"
+
+[ "$mode" = apply ] || exit 0
+if [ "$dry_run" = true ]; then
+    printf 'apply=dry-run verified exact candidates\n'
+    exit 0
+fi
+[ "$(id -u)" -eq 0 ] || fail "apply requires root"
+if [ "$status" = up-to-date ]; then
+    printf 'apply=no-op\n'
+    exit 0
+fi
+
+rsync -a --delete "$wrapper_candidate_root/" "$WRAPPER_DIR/"
+install -m 0755 "$linuxgsm_bootstrap" "$SHARE_DIR/linuxgsm.sh"
+cat > "$TEMP_DIR/source" <<EOF
+wrapper_channel=official jesinmat/linux-gameservers master
+wrapper_commit=$wrapper_candidate_commit
+wrapper_archive_sha256=$wrapper_candidate_sha256
+linuxgsm_channel=official stable tags
+linuxgsm_version=$linuxgsm_candidate_version
+linuxgsm_tag_commit=$linuxgsm_candidate_commit
+linuxgsm_bootstrap_sha256=$linuxgsm_candidate_sha256
+EOF
+install -m 0644 "$TEMP_DIR/source" "$SOURCE_RECORD"
+printf 'apply=complete\n'

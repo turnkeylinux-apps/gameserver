@@ -59,9 +59,10 @@ later by logging into the appliance and following the guide in `Manual headless
 installation`_.
 
 Update gameserver list
-----------------------------
+----------------------
 
-If a game on the `supported games <https://github.com/jesinmat/linux-gameservers/tree/master#supported-games>`_ list is missing, you need to update the gameserver list. There are two methods to update the gameserver list, through the Configuration Console or updating the repo from the CLI.
+The Configuration Console and CLI use the same verified update channel for the
+game catalog and LinuxGSM bootstrap.
 
 
 
@@ -81,26 +82,16 @@ Method 1:
 Method 2:
 ^^^^^^^^^^^
 
-#. SSH into the appliance and stop the service::
+#. SSH into the appliance and check the official channels::
 
-    ~# systemctl stop gameserver
+    ~# turnkey-gameserver-update --check
 
-#. Change to gameservers directory::
+#. Apply the verified catalog and LinuxGSM release::
 
-    ~# cd /root/gameservers/
-
-#. Pull down the latest from the git repo::
-
-    ~/gameservers# git pull origin master
-
-#. Start the gameserver service::
-
-    ~/gameservers# systemctl start gameserver
-    
-Done!
+    ~# turnkey-gameserver-update --apply
 
 Update game server version
-----------------------------
+--------------------------
 If there is an update to the game after deploying your server, you may need to update the server to allow clients with the newer version to connect. Like with updating the game server list, this can either be done through the GUI or manually. Here are instructions for the two methods:
 
 Method 1:
@@ -127,21 +118,14 @@ Method 2:
 
     ~# systemctl stop gameserver
 
-#. Change to gameservers directory::
+#. Check and update your game server (replace ``<CODE>`` with its code)::
 
-    ~# cd /root/gameservers/
-
-#. Update your game server (replace ``<CODE>`` with the Code from step 1)::
-
-    ~# ./auto_install.sh -g <CODE> -u gameuser -p /home/gameuser/gameserver
-
-   e.g. for a Satisfactory server (code ``sf``)
-
-    ``~# ./auto_install.sh -g sf -u gameuser -p /home/gameuser/gameserver``
+    ~# sudo -H -u gameuser /home/gameuser/gameserver/<CODE>server check-update
+    ~# sudo -H -u gameuser /home/gameuser/gameserver/<CODE>server update
 
 #. Start the game server back up::
 
-    ~# ./sfserver start
+    ~# systemctl start gameserver
 
 The server should now be updated to the latest version of the game.
 
