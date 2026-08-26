@@ -40,10 +40,13 @@ printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\| Mumble' ||
     fail "lightweight Mumble server definition is missing"
 
 nginx -t >/dev/null 2>&1
-landing_page=$(curl -fsS http://127.0.0.1/)
-printf '%s' "$landing_page" | grep -q '<h1>TurnKey GameServer</h1>' ||
+http_redirect=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' http://127.0.0.1/)
+[ "$http_redirect" = '307 https://127.0.0.1/' ] ||
+    fail "HTTP did not redirect to the HTTPS management page"
+landing_page=$(curl -kfsS https://127.0.0.1/)
+grep -q '<h1>TurnKey GameServer</h1>' <<<"$landing_page" ||
     fail "game-server management landing page did not render"
-printf '%s' "$landing_page" | grep -q 'Webmin' || fail "management link is missing"
+grep -q 'Webmin' <<<"$landing_page" || fail "management link is missing"
 [ -x /usr/local/bin/gameserver-init ] || fail "game-server selector is missing"
 [ -f /usr/lib/confconsole/plugins.d/Game_Server/update_list.py ] ||
     fail "catalog update action is missing from Configuration Console"
