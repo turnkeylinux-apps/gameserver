@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+set -o pipefail
+
 GAMEUSER="gameuser"
 LOGFILE="/var/log/gameserver/install.log"
 GAME_REPO_DIR="/root/gameservers"
