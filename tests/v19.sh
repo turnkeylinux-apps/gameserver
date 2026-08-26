@@ -40,7 +40,8 @@ printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\| Mumble' ||
     fail "lightweight Mumble server definition is missing"
 
 nginx -t >/dev/null 2>&1
-landing_page=$(curl -fsS http://127.0.0.1/)
+landing_page=$(curl --insecure --fail --silent --show-error --location \
+    http://127.0.0.1/)
 printf '%s' "$landing_page" | grep -q '<h1>TurnKey GameServer</h1>' ||
     fail "game-server management landing page did not render"
 printf '%s' "$landing_page" | grep -q 'Webmin' || fail "management link is missing"
