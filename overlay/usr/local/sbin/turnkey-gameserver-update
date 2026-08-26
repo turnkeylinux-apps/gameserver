@@ -42,6 +42,7 @@ prepare_wrapper() {
         "$wrapper_root/auto_install.sh"
     grep -q 'install -o "$GAMEUSER".*turnkey-gameserver/linuxgsm.sh' \
         "$wrapper_root/auto_install.sh" || fail "wrapper bootstrap patch did not apply"
+    rm -rf "$wrapper_root/games/mumble"
 }
 
 fetch_candidate() {

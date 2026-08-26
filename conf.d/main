@@ -61,6 +61,9 @@ sed -i '\|run_as_user "wget -O .*https://linuxgsm.sh"|c\    install -o "$GAMEUSE
 grep -q 'install -o "$GAMEUSER".*turnkey-gameserver/linuxgsm.sh' \
     "$GAME_REPO_DIR/auto_install.sh"
 
+# Mumble was removed from LinuxGSM and can no longer be installed.
+rm -rf "$GAME_REPO_DIR/games/mumble"
+
 cat > /usr/local/share/turnkey-gameserver/source <<EOF
 wrapper_channel=official jesinmat/linux-gameservers master
 wrapper_commit=$WRAPPER_COMMIT

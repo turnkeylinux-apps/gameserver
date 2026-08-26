@@ -36,8 +36,11 @@ grep -qx 'version="v26.2.0"' "$LINUXGSM_BOOTSTRAP" || fail "LinuxGSM runtime ver
 server_list=$(cd "$WRAPPER_DIR" && ./auto_install.sh --list)
 server_count=$(printf '%s\n' "$server_list" | grep -Ec '^\| [a-z0-9_-]+[[:space:]]+\|')
 [ "$server_count" -ge 100 ] || fail "supported server catalog is unexpectedly small"
-printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\| Mumble' ||
-    fail "lightweight Mumble server definition is missing"
+printf '%s\n' "$server_list" | grep -Eq '^\| ts3[[:space:]]+\| Teamspeak 3' ||
+    fail "lightweight TeamSpeak server definition is missing"
+if printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\|'; then
+    fail "catalog offers the LinuxGSM-unsupported Mumble server"
+fi
 
 nginx -t >/dev/null 2>&1
 http_redirect=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' http://127.0.0.1/)
@@ -105,22 +108,22 @@ systemctl stop gameserver
 cleanup
 trap - EXIT HUP INT TERM
 
-GAME=mumble /usr/local/bin/gameserver-init
+GAME=ts3 /usr/local/bin/gameserver-init
 [ -e /etc/gameserver/installation.done ] ||
-    fail "Mumble catalog installation did not complete"
-grep -qx 'GAME="mumble"' /etc/gameserver/gameserver ||
-    fail "Mumble catalog selection was not retained"
-[ -x /home/gameuser/gameserver/mumbleserver ] ||
-    fail "LinuxGSM Mumble entry point was not installed"
-systemctl -q is-active gameserver || fail "installed Mumble server is not active"
-runuser -l gameuser -c '~/gameserver/mumbleserver monitor' >/dev/null ||
-    fail "LinuxGSM did not report the installed Mumble server running"
+    fail "TeamSpeak catalog installation did not complete"
+grep -qx 'GAME="ts3"' /etc/gameserver/gameserver ||
+    fail "TeamSpeak catalog selection was not retained"
+[ -x /home/gameuser/gameserver/ts3server ] ||
+    fail "LinuxGSM TeamSpeak entry point was not installed"
+systemctl -q is-active gameserver || fail "installed TeamSpeak server is not active"
+runuser -l gameuser -c '~/gameserver/ts3server monitor' >/dev/null ||
+    fail "LinuxGSM did not report the installed TeamSpeak server running"
 
 if [ -n "${TKL_TEST_RESULT:-}" ]; then
     cat > "$TKL_TEST_RESULT" <<EOF
 package_source=official jesinmat wrapper commit d2017be9f56db0da2a1c45651e656f47bc7ce42a and LinuxGSM v26.2.0 tag
 installed_version=linux-gameservers d2017be9 with LinuxGSM v26.2.0
-runtime_checks=management landing page, 100-plus server catalog, real Mumble catalog installation, LinuxGSM monitor, update check, and service lifecycle passed
+runtime_checks=management landing page, reconciled 100-plus server catalog, real TeamSpeak catalog installation, LinuxGSM monitor, update check, and service lifecycle passed
 updater_command=turnkey-gameserver-update --check; turnkey-gameserver-update --apply --dry-run
 updater_result=verified exact wrapper master commit and LinuxGSM stable tag; installed sources are current
 updater_channel=official wrapper master and official LinuxGSM stable tags
@@ -128,5 +131,5 @@ integrity_evidence=wrapper archive SHA256 302b859632e34715f88b6f3455b7925efe822f
 EOF
 fi
 
-echo "PASS: GameServer management, Mumble install, updater, and service lifecycle"
+echo "PASS: GameServer management, TeamSpeak install, updater, and service lifecycle"
 echo "wrapper=d2017be9f56db0da2a1c45651e656f47bc7ce42a linuxgsm=v26.2.0 servers=$server_count"
