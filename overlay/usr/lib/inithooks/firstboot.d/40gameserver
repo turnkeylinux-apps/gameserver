@@ -21,3 +21,7 @@ $INITHOOKS_PATH/bin/gameserver.py \
     --gameserver-branch="$APP_GAMESERVER_BRANCH"
 
 [[ -n "$skip_init" ]] || /usr/local/bin/gameserver-init
+
+# Nginx may have attempted to start while the shared SSL hook was replacing
+# the appliance certificate. Restore it after that hook has completed.
+systemctl restart nginx
