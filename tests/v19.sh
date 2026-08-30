@@ -165,8 +165,9 @@ grep -Fq 'select_game_interactive ||' /usr/local/bin/gameserver-init ||
 server_list=$(cd "$WRAPPER_DIR" && ./auto_install.sh --list)
 server_count=$(printf '%s\n' "$server_list" | grep -Ec '^\| [a-z0-9_-]+[[:space:]]+\|')
 [ "$server_count" -ge 100 ] || fail "supported server catalog is unexpectedly small"
-printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\| Mumble' ||
-    fail "lightweight Mumble server definition is missing"
+if printf '%s\n' "$server_list" | grep -Eq '^\| mumble[[:space:]]+\|'; then
+    fail "updated catalog restored the LinuxGSM-unsupported Mumble server"
+fi
 interactive_count=$(PYTHONDONTWRITEBYTECODE=1 python3 - "$WRAPPER_DIR" <<'PY'
 import importlib.util
 import sys
@@ -176,13 +177,13 @@ spec = importlib.util.spec_from_file_location(
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 games = module.parse_games_from_directory(sys.argv[1] + "/games")
-assert ("mumble", "Mumble") in games
+assert ("ts3", "Teamspeak 3") in games
 print(len(games))
 PY
 )
 [ "$interactive_count" = "$server_count" ] ||
     fail "interactive selector parsed a different catalog"
-grep -qx 'GAME="mumble"' "$WRAPPER_DIR/games/mumble/game_properties.sh" ||
+grep -qx 'GAME="ts3"' "$WRAPPER_DIR/games/ts3/game_properties.sh" ||
     fail "automatic selector input is invalid"
 
 nginx -t >/dev/null 2>&1
@@ -234,8 +235,8 @@ if [ -n "${TKL_TEST_RESULT:-}" ]; then
 package_source=official jesinmat wrapper commit d2017be9f56db0da2a1c45651e656f47bc7ce42a and LinuxGSM v26.2.0 tag
 installed_version=linux-gameservers d2017be9 with LinuxGSM v26.2.0
 runtime_checks=management landing page, reconciled 100-plus server catalog, real TeamSpeak catalog installation, LinuxGSM monitor, update check, and service lifecycle passed
-updater_command=turnkey-gameserver-update --check; turnkey-gameserver-update --apply --dry-run
-updater_result=verified exact wrapper master commit and LinuxGSM stable tag; installed sources are current
+updater_command=turnkey-gameserver-update --check; disposable LinuxGSM v26.1.0 state; turnkey-gameserver-update --apply
+updater_result=real apply path upgraded the official v26.1.0 bootstrap to v26.2.0 and wrote the verified final source record
 updater_channel=official wrapper master and official LinuxGSM stable tags
 integrity_evidence=wrapper archive SHA256 302b859632e34715f88b6f3455b7925efe822fb0b6b4a04514af12c1143cb983; LinuxGSM bootstrap SHA256 0a17b88b4d6a272ce8494d55fc0c2748f3187057c15b801d71991428aa8f79bd
 EOF
