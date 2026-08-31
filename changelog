@@ -1,3 +1,17 @@
+turnkey-gameserver-19.0 (1) turnkey; urgency=low
+
+  * Port the appliance to Debian 13 (Trixie).
+
+  * Pin the official game catalog wrapper and LinuxGSM v26.2.0 bootstrap with
+    verified source records.
+
+  * Add a supervised updater for the wrapper master and LinuxGSM stable tags.
+
+  * Preserve interactive and unattended game selection, Configuration Console
+    management, non-root game processes, and systemd service lifecycle.
+
+ -- TurnKey Linux release engineering <release-engineering@turnkeylinux.org>  Tue, 25 Aug 2026 22:30:00 +0000
+
 turnkey-gameserver-18.1 (1) turnkey; urgency=low
 
   * v18.1 rebuild - includes latest Debian & TurnKey packages.

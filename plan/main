@@ -10,3 +10,17 @@ jq
 tmux
 netcat-openbsd
 sudo
+curl
+wget
+file
+tar
+gzip
+unzip
+bsdextrautils
+python3
+util-linux
+ca-certificates
+iproute2
+xz-utils
+git
+rsync
